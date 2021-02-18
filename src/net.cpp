@@ -1,3 +1,5 @@
+#include <yojimbo/yojimbo.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,10 +17,23 @@
 #include "net.h"
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 DPID AVPDPNetID;
 int QuickStartMultiplayer=1;
 DPNAME AVPDPplayerName;
 int glpDP; /* directplay object */
+
+void init_net()
+{
+    InitializeYojimbo();
+}
+
+void shutdown_net()
+{
+    ShutdownYojimbo();
+}
 
 BOOL DpExtInit(DWORD cGrntdBufs, DWORD cBytesPerBuf, BOOL bErrChcks)
 {
@@ -80,7 +95,8 @@ BOOL DirectPlay_UpdateSessionList(int *SelectedItem)
 
 int DirectPlay_JoinGame()
 {
-	fprintf(stderr, "DirectPlay_JoinGame()\n");
+    extern char IPAddressString[];
+    fprintf(stderr, "DirectPlay_JoinGame(%s)\n", IPAddressString);
 	
 	return 0;
 }
@@ -153,4 +169,8 @@ HRESULT IDirectPlayX_GetPlayerName(int glpDP, DPID id, void *data, void *size)
 	return 1;
 }
 
+#ifdef __cplusplus
+};
+#endif
 /* End of Linux-related junk */
+

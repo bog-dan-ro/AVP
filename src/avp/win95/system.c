@@ -42,7 +42,7 @@ New sound system
 #include "bh_rubberduck.h"
 #include "game_statistics.h"
 #include "cdtrackselection.h"
-
+#include "net.h"
 
 // EXTERNS
 
@@ -975,4 +975,5 @@ void ExitGame(void)
 	SetCurrentImageGroup(0);
 	DeallocateCurrentImages();
 	#endif
+    shutdown_net();
 }
