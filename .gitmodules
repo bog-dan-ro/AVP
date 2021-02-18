@@ -1,0 +1,3 @@
+[submodule "src/yojimbo"]
+	path = src/yojimbo
+	url = git@github.com:pROmeTEuL/yojimbo.git

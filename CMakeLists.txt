@@ -47,6 +47,8 @@ IF(NOT AVP_WEB)
     INCLUDE(FindSDL)
     INCLUDE(FindOpenGL)
     INCLUDE(FindOpenAL)
+    INCLUDE(FindSodium.cmake)
+    INCLUDE(FindmbedTLS.cmake)
 
     # Use SDL 1.2 if it is installed, else use SDL 2.0.
     IF(NOT SDL_TYPE)
@@ -148,6 +150,14 @@ IF(NOT AVP_WEB)
     IF(NOT OPENAL_FOUND)
         MESSAGE(FATAL_ERROR "OpenAL is required but CMake couldn't find it.")
     ENDIF(NOT OPENAL_FOUND)
+
+    IF(NOT Sodium_FOUND)
+        MESSAGE(FATAL_ERROR "Sodium is required but CMake couldn't find it.")
+    ENDIF(NOT Sodium_FOUND)
+
+    IF(NOT MBEDTLS_FOUND)
+        MESSAGE(FATAL_ERROR "Sodium is required but CMake couldn't find it.")
+    ENDIF(NOT MBEDTLS_FOUND)
 ENDIF(NOT AVP_WEB)
 
 # required source files
@@ -370,6 +380,13 @@ LIST(APPEND source src/openal.c)
 LIST(APPEND source src/cdplayer.c)
 LIST(APPEND source src/menus.c)
 
+# yojimbo nework library
+LIST(APPEND source src/yojimbo/netcode.io/netcode.c)
+LIST(APPEND source src/yojimbo/reliable.io/reliable.c)
+LIST(APPEND source src/yojimbo/tlsf/tlsf.c)
+LIST(APPEND source src/yojimbo/yojimbo.cpp)
+
+
 IF(WIN32)
   LIST(APPEND source src/winfiles.c)
 ELSE(WIN32)
@@ -462,4 +479,11 @@ IF(NOT AVP_WEB)
     ENDIF(OPENGL_TYPE STREQUAL "OPENGLES2")
 
     TARGET_LINK_LIBRARIES(avp ${OPENAL_LIBRARY})
+
+    INCLUDE_DIRECTORIES(${sodium_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(avp ${sodium_LIBRARIES})
+
+    INCLUDE_DIRECTORIES(${MBEDTLS_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(avp ${MBEDTLS_LIBRARIES})
+
 ENDIF(NOT AVP_WEB)
