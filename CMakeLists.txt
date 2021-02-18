@@ -49,6 +49,8 @@ IF(NOT AVP_WEB)
     INCLUDE(FindSDL)
     INCLUDE(FindOpenGL)
     INCLUDE(FindOpenAL)
+    set(ECM_ENABLE_SANITIZERS "" CACHE STRING "Enable sanitizers, e.g. address;leak;undefined")
+    INCLUDE(ECMEnableSanitizers.cmake)
 
     # Use SDL 1.2 if it is installed, else use SDL 2.0.
     IF(NOT SDL_TYPE)
@@ -157,7 +159,7 @@ LIST(APPEND source src/bink.c)
 LIST(APPEND source src/stubs.c)
 LIST(APPEND source src/version.c)
 LIST(APPEND source src/mathline.c)
-LIST(APPEND source src/net.c)
+LIST(APPEND source src/net.cpp)
 LIST(APPEND source src/frustum.c)
 LIST(APPEND source src/kshape.c)
 LIST(APPEND source src/map.c)
@@ -468,7 +470,5 @@ IF(NOT AVP_WEB)
     TARGET_LINK_LIBRARIES(avp ${LIBAV_LIBRARIES})
     TARGET_LINK_LIBRARIES(avp ${SWSCALE_LIBRARIES})
     TARGET_LINK_LIBRARIES(avp ${AVCODEC_LIBRARIES})
-
-
 
 ENDIF(NOT AVP_WEB)

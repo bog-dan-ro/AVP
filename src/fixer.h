@@ -104,18 +104,18 @@ typedef char * LPTSTR;
 
 typedef struct RECT
 {
-	int left;
-	int top;
-	int right;
-	int bottom;
+    int left;
+    int top;
+    int right;
+    int bottom;
 } RECT;
 
 typedef struct PALETTEENTRY
 {
-	BYTE peRed;
-	BYTE peGreen;
-	BYTE peBlue;
-	BYTE peFlags;
+    BYTE peRed;
+    BYTE peGreen;
+    BYTE peBlue;
+    BYTE peFlags;
 } PALETTEENTRY;
 
 #if !defined(__INTEL_COMPILER)
@@ -143,7 +143,7 @@ typedef unsigned __int64 uint64_t;
 #define GENERIC_READ			0x0008
 #define OPEN_EXISTING			0x0010
 #define FILE_CURRENT			0x0020
-#define FILE_BEGIN			0x0040	
+#define FILE_BEGIN			0x0040
 #define FILE_END			0x0080
 #define FILE_SHARE_READ			0x0100
 #define FILE_SHARE_WRITE		0x0200
@@ -153,16 +153,16 @@ typedef unsigned __int64 uint64_t;
 #define FILE_ATTRIBUTE_NORMAL		0x2000
 
 #if defined(__BIG_ENDIAN__)
-	extern void DoByteSwap2(void* x);
-	extern void DoByteSwap4(void* x);
-	extern void DoByteSwap8(void* x);
-	#define BYTESWAP2(x)	DoByteSwap2((void*)&x);
-	#define BYTESWAP4(x)	DoByteSwap4((void*)&x);
-	#define BYTESWAP8(x)	DoByteSwap8((void*)&x);
+    extern void DoByteSwap2(void* x);
+    extern void DoByteSwap4(void* x);
+    extern void DoByteSwap8(void* x);
+    #define BYTESWAP2(x)	DoByteSwap2((void*)&x);
+    #define BYTESWAP4(x)	DoByteSwap4((void*)&x);
+    #define BYTESWAP8(x)	DoByteSwap8((void*)&x);
 #else
-	#define BYTESWAP2(x)	{}
-	#define BYTESWAP4(x)	{}
-	#define BYTESWAP8(x)	{}
+    #define BYTESWAP2(x)	{}
+    #define BYTESWAP4(x)	{}
+    #define BYTESWAP8(x)	{}
 #endif
 
 HANDLE CreateFile(const char *file, int write, int x, int y, int flags, int flags2, int z);
@@ -190,17 +190,17 @@ unsigned int GetTickCount();
 
 typedef struct JOYINFOEX
 {
-	DWORD dwXpos;
-	DWORD dwYpos;
-	DWORD dwRpos;
-	DWORD dwUpos;
-	DWORD dwVpos;
-	DWORD dwPOV;
+    DWORD dwXpos;
+    DWORD dwYpos;
+    DWORD dwRpos;
+    DWORD dwUpos;
+    DWORD dwVpos;
+    DWORD dwPOV;
 } JOYINFOEX;
 
 typedef struct JOYCAPS
 {
-	int wCaps;
+    int wCaps;
 } JOYCAPS;
 
 #ifdef __cplusplus
@@ -217,10 +217,10 @@ typedef int DPID;
 
 typedef struct DPNAME
 {
-	int dwSize;
-	
-	char *lpszShortNameA;
-	char *lpszLongNameA;
+    int dwSize;
+
+    char *lpszShortNameA;
+    char *lpszLongNameA;
 } DPNAME;
 
 #define DP_OK	0
@@ -248,27 +248,27 @@ typedef struct DPNAME
 
 typedef struct DPMSG_GENERIC
 {
-	int dwType;
+    int dwType;
 } DPMSG_GENERIC;
 typedef DPMSG_GENERIC * LPDPMSG_GENERIC;
 
 typedef struct DPMSG_CREATEPLAYERORGROUP
 {
-	int dwType;
-	
-	DPID dpId;
-	int dwPlayerType;
-	
-	DPNAME dpnName;
+    int dwType;
+
+    DPID dpId;
+    int dwPlayerType;
+
+    DPNAME dpnName;
 } DPMSG_CREATEPLAYERORGROUP;
 typedef DPMSG_CREATEPLAYERORGROUP * LPDPMSG_CREATEPLAYERORGROUP;
 
 typedef struct DPMSG_DESTROYPLAYERORGROUP
 {
-	int dwType;
-	
-	DPID dpId;
-	int dwPlayerType;	
+    int dwType;
+
+    DPID dpId;
+    int dwPlayerType;
 } DPMSG_DESTROYPLAYERORGROUP;
 typedef DPMSG_DESTROYPLAYERORGROUP * LPDPMSG_DESTROYPLAYERORGROUP;
 #ifdef __cplusplus

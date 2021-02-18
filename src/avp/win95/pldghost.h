@@ -16,55 +16,54 @@ extern "C" {
 
 typedef struct netghostdatablock
 {
-//	DPID playerId;
-	int playerId;
-	
-	signed int playerObjectId; /* -1 == player, all other numbers used for objects */
-	AVP_BEHAVIOUR_TYPE type;
-	INANIMATEOBJECT_TYPE IOType;
-	int subtype;
-	SHAPEANIMATIONCONTROLLER ShpAnimCtrl;
+    DPID playerId;
 
-	/* KJL 17:33:41 22/01/99 - I've made this a union because I needed a storage space,
-	and the currentAnimSequence is only used by specific objects */
-	//union
-	//{
-		int currentAnimSequence;
-	//	int EventCounter; // used by grenades
-	//};
-	
-	DISPLAYBLOCK *myGunFlash;
-	SECTION_DATA *GunflashSectionPtr;
-	int GunFlashFrameStamp;
-	int CurrentWeapon;
+    signed int playerObjectId; /* -1 == player, all other numbers used for objects */
+    AVP_BEHAVIOUR_TYPE type;
+    INANIMATEOBJECT_TYPE IOType;
+    int subtype;
+    SHAPEANIMATIONCONTROLLER ShpAnimCtrl;
 
-	int SoundHandle;
-	int SoundHandle2;
-	int SoundHandle3;
-	int SoundHandle4;
-	int integrity;
-	int timer;
+    /* KJL 17:33:41 22/01/99 - I've made this a union because I needed a storage space,
+    and the currentAnimSequence is only used by specific objects */
+    //union
+    //{
+        int currentAnimSequence;
+    //	int EventCounter; // used by grenades
+    //};
 
-	int FlameHitCount;//number of fire particles that have hit since last frame
-	int FlechetteHitCount;//number of flechette particles that have hit since last frame
+    DISPLAYBLOCK *myGunFlash;
+    SECTION_DATA *GunflashSectionPtr;
+    int GunFlashFrameStamp;
+    int CurrentWeapon;
 
-	HMODELCONTROLLER HModelController;
-	HITLOCATIONTABLE *hltable;
-	
-	int CloakingEffectiveness;
+    int SoundHandle;
+    int SoundHandle2;
+    int SoundHandle3;
+    int SoundHandle4;
+    int integrity;
+    int timer;
 
-	unsigned int IgnitionHandshaking :1;
+    int FlameHitCount;//number of fire particles that have hit since last frame
+    int FlechetteHitCount;//number of flechette particles that have hit since last frame
 
-	unsigned int invulnerable :1; //for netghost's of players
-	unsigned int onlyValidFar:1; //set for alien ai that are far from everyone
-	unsigned int soundStartFlag:1;
+    HMODELCONTROLLER HModelController;
+    HITLOCATIONTABLE *hltable;
 
-	#if EXTRAPOLATION_TEST
-	VECTORCH velocity;
-	int extrapTimerLast;
-	int extrapTimer;
-	unsigned int lastTimeRead;
-	#endif
+    int CloakingEffectiveness;
+
+    unsigned int IgnitionHandshaking :1;
+
+    unsigned int invulnerable :1; //for netghost's of players
+    unsigned int onlyValidFar:1; //set for alien ai that are far from everyone
+    unsigned int soundStartFlag:1;
+
+    #if EXTRAPOLATION_TEST
+    VECTORCH velocity;
+    int extrapTimerLast;
+    int extrapTimer;
+    unsigned int lastTimeRead;
+    #endif
 }NETGHOSTDATABLOCK;
 
 /*---------------------------Patrick 28/3/97----------------------------
@@ -72,14 +71,10 @@ typedef struct netghostdatablock
   ----------------------------------------------------------------------*/
 extern void UpdateGhost(STRATEGYBLOCK *sbPtr,VECTORCH *position,EULER *orientation,int sequence, int special);
 extern void RemoveGhost(STRATEGYBLOCK *sbPtr);
-//extern void RemovePlayersGhosts(DPID id);
-//extern void RemovePlayerGhost(DPID id);
-//extern STRATEGYBLOCK *FindGhost(DPID Id, int obId);
-//extern STRATEGYBLOCK *CreateNetGhost(DPID playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype);
-extern void RemovePlayersGhosts(int id);
-extern void RemovePlayerGhost(int id);
-extern STRATEGYBLOCK *FindGhost(int Id, int obId);
-extern STRATEGYBLOCK *CreateNetGhost(int playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype);
+extern void RemovePlayersGhosts(DPID id);
+extern void RemovePlayerGhost(DPID id);
+extern STRATEGYBLOCK *FindGhost(DPID Id, int obId);
+extern STRATEGYBLOCK *CreateNetGhost(DPID playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype);
 extern void MakeGhostNear(STRATEGYBLOCK *sbPtr);
 extern void MakeGhostFar(STRATEGYBLOCK *sbPtr);
 extern void DamageNetworkGhost(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple, SECTION_DATA *section,VECTORCH* incoming);

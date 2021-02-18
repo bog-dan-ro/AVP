@@ -21,15 +21,15 @@ typedef struct HuffNode // 16-byte node structure
         struct HuffNode *zero;   // points to the "zero" branch or...
         unsigned int       value;	// holds the value of an end node
     };
-    
+
     union
     {								// the SECOND four bytes
         struct HuffNode *one;    // points to the "one" branch or...
         struct HuffNode *link;   // points to next end node in list
     };
-    
+
     struct HuffNode     *parent; // the THIRD four bytes, parent node
-    
+
 //    union
 //   {   	                        // the FOURTH four bytes
         unsigned int       bits;    // the bit pattern of this end node
@@ -38,7 +38,7 @@ typedef struct HuffNode // 16-byte node structure
 //            unsigned char  flag;
 //            unsigned char  curdepth;
 //            unsigned char  maxdepth;
-//            unsigned char  unused;  
+//            unsigned char  unused;
 //        };
 //    };
 
@@ -73,53 +73,53 @@ static int HuffEncodeBytes(int *dest, unsigned char *source, int count, HuffEnco
 
 extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length)
 {
-	HuffmanPackage *outpackage;
+    HuffmanPackage *outpackage;
 
 
-	// Step 1: Perform the symbol census
-	PerformSymbolCensus(sourcePtr,length);
-	// Step 2: Sorting the census data
-	SortCensusData();
-	// Step 3: Building the Huffman tree
-	BuildHuffmanTree();
-	// Step 4: Making the code lengths table
-	MakeCodeLengthsFromHuffTree(Depths, TreeNodes, MAX_DEPTH);
-	// Step 5: Limiting code lengths
-	HuffDepthsAdjust(Depths, MAX_DEPTH);
-	// Step 6: Making the encoding table
-	MakeHuffmanEncodeTable(EncodingTable,&SymbolCensus[256],Depths);
-	// Step 7: Encoding data
-	outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage)+length);
-	strncpy(outpackage->Identifier,COMPRESSED_RIF_IDENTIFIER,8);
-	outpackage->CompressedDataSize = HuffEncodeBytes((int*)(outpackage+1), sourcePtr, length, EncodingTable);
+    // Step 1: Perform the symbol census
+    PerformSymbolCensus(sourcePtr,length);
+    // Step 2: Sorting the census data
+    SortCensusData();
+    // Step 3: Building the Huffman tree
+    BuildHuffmanTree();
+    // Step 4: Making the code lengths table
+    MakeCodeLengthsFromHuffTree(Depths, TreeNodes, MAX_DEPTH);
+    // Step 5: Limiting code lengths
+    HuffDepthsAdjust(Depths, MAX_DEPTH);
+    // Step 6: Making the encoding table
+    MakeHuffmanEncodeTable(EncodingTable,&SymbolCensus[256],Depths);
+    // Step 7: Encoding data
+    outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage)+length);
+    strncpy(outpackage->Identifier,COMPRESSED_RIF_IDENTIFIER,8);
+    outpackage->CompressedDataSize = HuffEncodeBytes((int*)(outpackage+1), sourcePtr, length, EncodingTable);
     outpackage->UncompressedDataSize = length;
-    for (int n = 0; n < MAX_DEPTH; n++)  
-	{
-    	outpackage->CodelengthCount[n] = Depths[n + 1];
-	}
+    for (int n = 0; n < MAX_DEPTH; n++)
+    {
+        outpackage->CodelengthCount[n] = Depths[n + 1];
+    }
     for (int n = 0; n < 256; n++)
-	{
-	   	outpackage->ByteAssignment[n]  = SymbolCensus[n + 1].Symbol;
-	}
-	return outpackage;
+    {
+        outpackage->ByteAssignment[n]  = SymbolCensus[n + 1].Symbol;
+    }
+    return outpackage;
 }
-			
+
 static void PerformSymbolCensus(unsigned char *sourcePtr, int length)
 {
-	// init array
-	for (int i=0; i<257; i++)
-	{
-		SymbolCensus[i].Symbol = i;
-		SymbolCensus[i].Count = 0;
-	}
+    // init array
+    for (int i=0; i<257; i++)
+    {
+        SymbolCensus[i].Symbol = i;
+        SymbolCensus[i].Count = 0;
+    }
 
-	// count 'em
-	do
-	{
-		SymbolCensus[*sourcePtr++].Count++;
-	}
-	while (--length);
-}			
+    // count 'em
+    do
+    {
+        SymbolCensus[*sourcePtr++].Count++;
+    }
+    while (--length);
+}
 
 static int __cdecl HuffItemsSortSub(const void *cmp1, const void *cmp2)
 {
@@ -131,12 +131,12 @@ static int __cdecl HuffItemsSortSub(const void *cmp1, const void *cmp2)
 }
 static void SortCensusData(void)
 {
-	qsort(SymbolCensus, 257, sizeof(HuffItem), HuffItemsSortSub);
+    qsort(SymbolCensus, 257, sizeof(HuffItem), HuffItemsSortSub);
 }
 
 static void BuildHuffmanTree(void)
 {
-	MakeHuffTreeFromHuffItems(TreeNodes,SymbolCensus,257);
+    MakeHuffTreeFromHuffItems(TreeNodes,SymbolCensus,257);
 }
 
 static void MakeHuffTreeFromHuffItems(HuffNode *base, HuffItem *source, int count)
@@ -152,8 +152,8 @@ static void MakeHuffTreeFromHuffItems(HuffNode *base, HuffItem *source, int coun
     memset(temp, 0, count * sizeof(HuffNode));
     for (n = 0; n < count; n++)
     {
-    	temp[n].bits = source[n].Count;
-	}
+        temp[n].bits = source[n].Count;
+    }
     while ((upperlim = --count))
     {
         if (temp[0].zero)
@@ -164,13 +164,13 @@ static void MakeHuffTreeFromHuffItems(HuffNode *base, HuffItem *source, int coun
         movdest[1]   = *temp;
         sum = movdest[0].bits + movdest[1].bits;
         lowerlim = 1;
-        
+
         while (lowerlim != upperlim)
         {
             index = (lowerlim + upperlim) >> 1;
             if (sum >= temp[index].bits)
             {
-            	lowerlim = index + 1;
+                lowerlim = index + 1;
             }
             else
             {
@@ -204,7 +204,7 @@ static void MakeCodeLengthsFromHuffTree(int *dest, HuffNode *source, int maxdept
             source = source->one;
             depth++;
         }
-        
+
         if (depth > maxdepth) dest[maxdepth]++;
         else dest[depth]++;
 
@@ -218,7 +218,7 @@ static void MakeCodeLengthsFromHuffTree(int *dest, HuffNode *source, int maxdept
         while (back == source->zero);
 
         source = source->zero;
-	    depth++;
+        depth++;
     }
 }
 
@@ -313,18 +313,18 @@ static int HuffEncodeBytes(int *dest, unsigned char *source, int count, HuffEnco
 
     if (!count) return 0;
 
-	accum = 0;
+    accum = 0;
     start = dest;
     sourcelim = sourceend = source + count;
     available = 32;
     if (sourcelim - 32 < sourcelim)
-	{
+    {
         sourcelim -= 32;
-	}
+    }
     else
-	{
+    {
         sourcelim = source;
-	}
+    }
     if (source < sourcelim)
     {
         do
@@ -338,7 +338,7 @@ lpstart:        val  = *source++;
                 bits = table[val].bits;
             }
             while ((available -= wid) >= 0);
-           
+
             wid       += available;
             if (wid) accum = (accum >> wid) | (bits << (32 - wid));
             *dest++    = accum;
@@ -351,7 +351,7 @@ lpstart:        val  = *source++;
     while (1)
     {
         if (source < sourceend)
-		{
+        {
             val = *source++;
         }
         else if (source == sourceend)
@@ -375,10 +375,10 @@ lpstart:        val  = *source++;
             available += 32;
         }
         else
-		{
+        {
             accum = (accum >> wid) | (bits << (32 - wid));
-		}
-    }    
+        }
+    }
     *dest++ = accum >> available;
     return (int)((dest - start) * 4);
 }
@@ -397,27 +397,27 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *tabl
 
 extern char *HuffmanDecompress(const HuffmanPackage *inpackage)
 {
-	unsigned char *uncompressedData = NULL;
-	// Step 1: Make the decoding table
-	MakeHuffmanDecodeTable(inpackage->CodelengthCount, MAX_DEPTH, inpackage->ByteAssignment);
+    unsigned char *uncompressedData = NULL;
+    // Step 1: Make the decoding table
+    MakeHuffmanDecodeTable(inpackage->CodelengthCount, MAX_DEPTH, inpackage->ByteAssignment);
 
-	// Step 2: Decode data
-	uncompressedData = (unsigned char*)AllocateMemory(inpackage->UncompressedDataSize+16);
-	if (uncompressedData)
-	{
-		HuffmanDecode(uncompressedData,(int*)(inpackage+1),DecodeTable,inpackage->UncompressedDataSize);
-	}
+    // Step 2: Decode data
+    uncompressedData = (unsigned char*)AllocateMemory(inpackage->UncompressedDataSize+16);
+    if (uncompressedData)
+    {
+        HuffmanDecode(uncompressedData,(int*)(inpackage+1),DecodeTable,inpackage->UncompressedDataSize);
+    }
 
-	return (char*)uncompressedData;	
+    return (char*)uncompressedData;
 }
 
 static void MakeHuffmanDecodeTable(const int *depth, int depthmax, const unsigned char *list)
 {
     int thisdepth, depthbit, repcount, repspace, lenbits, temp, count;
-	int *outp;
+    int *outp;
     int o = 0;
     const unsigned char *p;
-	int *outtbl = DecodeTable;
+    int *outtbl = DecodeTable;
 
     lenbits   = 0;
     repcount  = 1 << depthmax;
@@ -438,10 +438,10 @@ static void MakeHuffmanDecodeTable(const int *depth, int depthmax, const unsigne
         do
         {
             if (p < list)
-			{
+            {
                 temp = 0xff;
             }
-            else 
+            else
             {
                 temp = lenbits | (*p-- << 8);
             }
@@ -480,11 +480,11 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *tabl
     available = 0;
     reserve   = 0;
     wid       = 0;
-	resbits   = 0;
-    do 
+    resbits   = 0;
+    do
     {
         available     += wid;
-		fill = 31 - available;							  
+        fill = 31 - available;
         bits         <<= fill;
         if (fill > reserve)
         {
@@ -492,8 +492,8 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *tabl
             available += reserve;
             if (reserve)
             {
-            	bits   = (bits >> reserve) | (resbits << (32 - reserve));
-			}
+                bits   = (bits >> reserve) | (resbits << (32 - reserve));
+            }
             resbits    = *source++;
             reserve    = 32;
         }

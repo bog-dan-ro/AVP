@@ -47,6 +47,8 @@
 #include "kshape.h"
 #include "game.h"
 
+#include "net.h"
+
 /* KJL 16:00:13 11/22/96 - One of my evil experiments....   */
 #define PENTIUM_PROFILING_ON 0
 
@@ -179,6 +181,7 @@ void InitGame(void)
 	#else
 	SetToDefaultDetailLevels();
 	#endif
+    InitializeNetwork();
 }
 
 extern void create_strategies_from_list ();
