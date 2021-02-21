@@ -60,7 +60,7 @@ extern int QuickStartMultiplayer;
 extern char AVPDPplayerName[];
 extern int glpDP;
 
-#define CalculateBytesSentPerSecond 1
+#define CalculateBytesSentPerSecond 0
 
 /*----------------------------------------------------------------------
   Some globals for use in this file

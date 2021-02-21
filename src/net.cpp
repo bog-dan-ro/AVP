@@ -539,6 +539,17 @@ HRESULT Client::Receive()
 
 HRESULT Client::Send(const char *data, DWORD size)
 {
+#ifdef DEBUG_BPS
+    static size_t sent = 0;
+    static auto start = std::chrono::system_clock::now();
+    const auto now = std::chrono::system_clock::now();
+    std::chrono::duration<double> diff = now - start;
+    if (diff.count() >= 1) {
+        start = now;
+        std::cout << "Sent " << sent << " bytes in " << diff.count()<<  " second " << std::endl;
+        sent = 0;
+    }
+#endif
     auto res = Flush();
     if (res != DP_OK)
         return res;
@@ -546,6 +557,9 @@ HRESULT Client::Send(const char *data, DWORD size)
     res = Flush();
     if (res == DPERR_CONNECTIONLOST)
         return DPERR_CONNECTIONLOST;
+#ifdef DEBUG_BPS
+    sent += size;
+#endif
     return DP_OK;
 }
 
