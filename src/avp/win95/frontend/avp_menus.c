@@ -76,7 +76,7 @@ extern void PlayIntroSequence(void);
 
 extern void MinimalNetCollectMessages(void);
 
-extern int DirectPlay_HostGame(char *playerName, char *sessionName,int species,int gamestyle,int level);
+extern int NetHostGame(char *playerName, char *sessionName, int species, int gamestyle, int level);
 extern int NetJoinGame(void);
 extern int NetConnectToSession(int sessionNumber, char *playerName);
 extern int NetDisconnectSession(void);
@@ -760,7 +760,7 @@ extern void AvP_UpdateMenus(void)
         if(LobbiedGame)
         {
             extern char MP_PlayerName[];
-            retval=DirectPlay_ConnectingToLobbiedGame(MP_PlayerName);
+            retval=NetConnectingToLobbiedGame(MP_PlayerName);
             if(!retval)
             {
                 //player has aborted , go back a menu
@@ -770,7 +770,7 @@ extern void AvP_UpdateMenus(void)
         }
         else
         {
-            retval=DirectPlay_ConnectingToSession();
+            retval=NetConnectingToSession();
             if(!retval)
             {
                 //player has aborted , go back a menu
@@ -787,10 +787,10 @@ extern void AvP_UpdateMenus(void)
     }
     else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION)
     {
-        extern BOOL DirectPlay_UpdateSessionList(int * SelectedItem);
+        extern BOOL NetUpdateSessionList(int * SelectedItem);
         int selection=AvPMenus.CurrentlySelectedElement;
 
-        if(DirectPlay_UpdateSessionList(&selection))
+        if(NetUpdateSessionList(&selection))
         {
             //session list has changed , so we need to set the menu again
             SetupNewMenu(AVPMENU_MULTIPLAYERSELECTSESSION);
@@ -1079,7 +1079,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
                 return;
             }
 
-            DirectPlay_EnumConnections();
+            NetEnumConnections();
             MakeConnectionSelectMenu();
             break;
         }
@@ -3026,7 +3026,6 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
         {
             if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
             {
-                extern int DirectPlay_HostGame(char *playerName, char *sessionName,int species,int gamestyle,int level);
                 extern char MP_PlayerName[];
                 extern char MP_SessionName[];
                 extern int MP_Species;
@@ -3041,7 +3040,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 
                 AvP.Difficulty = 1;
 
-                if (DirectPlay_HostGame(MP_PlayerName,MP_SessionName,MP_Species,netGameData.gameType,netGameData.levelNumber))
+                if (NetHostGame(MP_PlayerName,MP_SessionName,MP_Species,netGameData.gameType,netGameData.levelNumber))
                 {
                     AvPMenus.MenusState = MENUSSTATE_STARTGAME;
                     if(netGameData.gameType==NGT_Coop)

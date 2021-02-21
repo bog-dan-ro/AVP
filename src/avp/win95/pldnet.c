@@ -359,7 +359,6 @@ static void Inform_AiHasDied(DPID killer,ALIEN_TYPE type,char weaponIcon);
 static void Inform_PlayerHasLeft(DPID player);
 static void Inform_PlayerHasJoined(DPID player);
 static void Inform_PlayerHasConnected(DPID player);
-static void Inform_NewHost(void);
 
 static void WriteFragmentStatus(int fragmentNumber, int status);
 static int ReadFragmentStatus(int fragmentNumber);
@@ -705,7 +704,7 @@ void MinimalNetCollectMessages(void)
 {
     /* collects messages until something other than DP_OK is returned (eg DP_NoMessages) */
     if(!netGameData.skirmishMode && glpDP && AVPDPNetID)
-        SessionReceiveMessages();
+        NetSessionReceiveMessages();
 }
 void NetCollectMessages(void)
 {
@@ -723,7 +722,7 @@ void NetCollectMessages(void)
 
     /* collects messages until something other than DP_OK is returned (eg DP_NoMessages) */
     if(!netGameData.skirmishMode && glpDP && AVPDPNetID)
-        SessionReceiveMessages();
+        NetSessionReceiveMessages();
     LogNetInfo("... Finished collecting Messages\n");
 
     /* check ghost integrities */
@@ -902,126 +901,6 @@ void NetCollectMessages(void)
 /*----------------------------------------------------------------------
   Functions for processing system messages
   ----------------------------------------------------------------------*/
-//#error remove me!
-static void ProcessSystemMessage(char *msgP,unsigned int msgSize)
-{
-    LPDPMSG_GENERIC systemMessage = (LPDPMSG_GENERIC)msgP;
-
-    /* currently, only the host deals with system mesages */
-    /* check for invalid parameters */
-    if((msgSize==0)||(msgP==NULL)) return;
-
-    switch(systemMessage->dwType)
-    {
-        case DPSYS_ADDPLAYERTOGROUP:
-        {
-            /* ignore */
-            break;
-        }
-        case DPSYS_CREATEPLAYERORGROUP:
-        {
-            /* only useful during startup: during main game, connecting player should
-            detect game state and exit immediately */
-            if((AvP.Network==I_Host))
-            {
-                LPDPMSG_CREATEPLAYERORGROUP createMessage;
-                createMessage = (LPDPMSG_CREATEPLAYERORGROUP)systemMessage;
-                if(createMessage->dwPlayerType == DPPLAYERTYPE_PLAYER)
-                {
-                    DPID id = createMessage->dpId;
-                    char *name = &(createMessage->dpnName.lpszShortNameA[0]);
-                    AddPlayerToGame(id, name);
-                }
-            }
-            LogNetInfo("system message:  DPSYS_CREATEPLAYERORGROUP \n");
-            break;
-        }
-        case DPSYS_DELETEPLAYERFROMGROUP:
-        {
-//					NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-            /* ignore */
-            break;
-        }
-        case DPSYS_DESTROYPLAYERORGROUP:
-        {
-            /* Aha. Either a player has left (should have sent a leaving message)
-            or s/he has exited abnormally. In either case, only need to act on
-            this during start-up. During the main game, the ghosts will time-out
-            anyway */
-            if((AvP.Network==I_Host))
-            {
-                LPDPMSG_DESTROYPLAYERORGROUP destroyMessage;
-                destroyMessage = (LPDPMSG_DESTROYPLAYERORGROUP)systemMessage;
-                if(destroyMessage->dwPlayerType == DPPLAYERTYPE_PLAYER)
-                {
-                    DPID id = destroyMessage->dpId;
-                    RemovePlayerFromGame(id);
-//					NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-                }
-            }
-            LogNetInfo("system message:  DPSYS_DESTROYPLAYERORGROUP \n");
-            break;
-        }
-        case DPSYS_HOST:
-        {
-            /* Aha... the host has died, then. This is a terminal game state,
-            as the host was managing the game. Thefore, temporarily adopt host
-            duties for the purpose of ending the game...
-            This is most important during the playing state, but also happens in
-            startup. In startup, peers keep a host timeout which should fire before
-            this message arrives anyway. */
-            LOCALASSERT(AvP.Network==I_Peer);
-            if((netGameData.myGameState==NGS_StartUp)||(netGameData.myGameState==NGS_Playing)||(netGameData.myGameState==NGS_Joining)||(netGameData.myGameState==NGS_EndGameScreen))
-            {
-                AvP.Network=I_Host;
-                /* Eek, I guess the old AIs bite the dust? */
-                //but the new host can create some more
-                AvP.NetworkAIServer = (netGameData.gameType==NGT_Coop);
-                Inform_NewHost();
-//				TransmitEndOfGameNetMsg();
-//				netGameData.myGameState = NGS_EndGame;
-//				AvP.MainLoopRunning = 0;
-
-                if(LobbiedGame)
-                {
-                    //no longer a lowly client
-                    LobbiedGame=LobbiedGame_Server;
-                }
-            }
-            LogNetInfo("system message:  DPSYS_HOST \n");
-            break;
-        }
-        case DPSYS_SESSIONLOST:
-        {
-            /* Aha. I have lost my connection. Time to exit the game gracefully.*/
-            NewOnScreenMessage("Session lost!!");
-            /*
-            if((netGameData.myGameState==NGS_StartUp)||(netGameData.myGameState==NGS_Joining)||(netGameData.myGameState==NGS_Playing))
-            {
-                netGameData.myGameState = NGS_Error_HostLost;
-            }
-
-            LogNetInfo("system message:  DPSYS_SESSIONLOST \n");
-            */
-            break;
-        }
-        case DPSYS_SETPLAYERORGROUPDATA:
-        {
-            /* ignore */
-            break;
-        }
-        case DPSYS_SETPLAYERORGROUPNAME:
-        {
-            /* ignore */
-            break;
-        }
-        default:
-        {
-            /* invalid system message type: ignore */
-            break;
-        }
-    }
-}
 
 void AddPlayerToGame(DPID id, const char* name)
 {
@@ -1649,7 +1528,7 @@ void NetSendMessages(void)
         {
             if(glpDP && AVPDPNetID)
             {
-                res = SessionSendMessage(&sendBuffer, numBytes);
+                res = NetSessionSendMessage(&sendBuffer, numBytes);
                 if(res != DP_OK)
                 {
                     //we have some problem sending...
@@ -9302,7 +9181,7 @@ void InitNetLog(void)
 #endif
 }
 
-void LogNetInfo(char *msg)
+void LogNetInfo(const char *msg)
 {
 #if logNetGameProcesses
         if(!msg) return;
@@ -9703,7 +9582,7 @@ static void Inform_PlayerHasConnected(DPID player)
     NetworkGameConsoleMessage(TEXTSTRING_MULTIPLAYERCONSOLE_CONNECTGAME,netGameData.playerData[playerIndex].name,0);
 }
 
-static void Inform_NewHost(void)
+void Inform_NewHost(void)
 {
     NewOnScreenMessage(GetTextString(TEXTSTRING_MULTIPLAYERCONSOLE_NEWHOST));
 }

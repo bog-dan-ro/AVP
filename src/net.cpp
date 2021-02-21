@@ -4,29 +4,20 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <thread>
 
 #include <assert.h>
 #include <fcntl.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#include "fixer.h"
-
 #include "3dc.h"
-#include "inline.h"
-#include "module.h"
 #include "stratdef.h"
-#include "equipmnt.h"
 
 #include "pldnet.h"
-#include "net.h"
 #include "avp_menus.h"
 
 using system_clock = std::chrono::system_clock;
@@ -51,8 +42,8 @@ public:
         : m_timeout(timeout)
     {}
     virtual ~Connection(){}
-    virtual HRESULT Receive() = 0;
-    virtual HRESULT Send(const char *data, DWORD dataSize) = 0;
+    virtual HRESULT ReceiveMessages() = 0;
+    virtual HRESULT SendMessage(const char *data, DWORD dataSize) = 0;
     virtual void SendGreetings(const std::string &/*name*/){};
 
 protected:
@@ -189,14 +180,6 @@ public:
         append(data, size);
         return *this;
     }
-
-    inline MessageWriter &consume(size_t sz) {
-        assert(sz <= size());
-        erase(0, sz);
-        m_pos = size();
-        return *this;
-    }
-
 private:
     uint32_t m_pos;
 };
@@ -206,9 +189,10 @@ class Server : public Connection
 public:
     Server(const std::string &sessionName, uint16_t port = DEFAULT_PORT, size_t maxConnections = NET_MAXPLAYERS);
     ~Server();
+
     // IOChannel interface
-    HRESULT Receive() final;
-    HRESULT Send(const char *data, DWORD dataSize) final;
+    HRESULT ReceiveMessages() final;
+    HRESULT SendMessage(const char *data, DWORD dataSize) final;
 
 private:
     struct Socket {
@@ -223,9 +207,8 @@ private:
                     break;
                 case MessageType::AddPlayer: {
                     int id;
-                    data >> id;
                     std::string name;
-                    data >> name;
+                    data >> id >> name;
                     assert(!data.size());
                     assert(socket == id);
                     AddPlayerToGame(id, name.c_str());
@@ -261,7 +244,7 @@ private:
             ::close(socket);
         }
 
-        HRESULT Recive()
+        HRESULT ReceiveMessages()
         {
             while (true) {
                 ssize_t size = ::read(socket, &sharedBuffer[0], sharedBuffer.size());
@@ -278,7 +261,7 @@ private:
             };
         }
 
-        HRESULT Send(const std::vector<int> &lostConnections, const char *data, size_t size)
+        HRESULT SendMessage(const std::vector<int> &lostConnections, const char *data, size_t size)
         {
             writeBuffer.appendData(MessageType::Data, data, size);
             for (int id : lostConnections) {
@@ -350,7 +333,7 @@ Server::~Server()
     ::close(m_acceptSocket);
 }
 
-HRESULT Server::Receive()
+HRESULT Server::ReceiveMessages()
 {
     struct sockaddr_storage in_addr;
     socklen_t in_len = sizeof(struct sockaddr_storage);
@@ -366,7 +349,7 @@ HRESULT Server::Receive()
     }
 
     for (auto it = m_connections.begin(); it != m_connections.end();) {
-        auto res = (*it)->Recive();
+        auto res = (*it)->ReceiveMessages();
         switch (res) {
         case DPERR_CONNECTIONLOST:
             m_lostConnections.push_back((*it)->socket);
@@ -379,7 +362,7 @@ HRESULT Server::Receive()
     return DP_OK;
 }
 
-HRESULT Server::Send(const char *data, DWORD dataSize)
+HRESULT Server::SendMessage(const char *data, DWORD dataSize)
 {
     bool busy = false;
     for (auto it = m_connections.begin(); it != m_connections.end();) {
@@ -402,7 +385,7 @@ HRESULT Server::Send(const char *data, DWORD dataSize)
     auto lostConnections = std::move(m_lostConnections);
     m_lostConnections.clear();
     for (auto it = m_connections.begin(); it != m_connections.end();) {
-        auto res = (*it)->Send(lostConnections, data, dataSize);
+        auto res = (*it)->SendMessage(lostConnections, data, dataSize);
         switch (res) {
         case DPERR_CONNECTIONLOST:
             m_lostConnections.push_back((*it)->socket);
@@ -422,12 +405,13 @@ public:
     ~Client();
 
     // IOChannel interface
-    HRESULT Receive() final;
-    HRESULT Send(const char *data, DWORD size) final;
+    HRESULT ReceiveMessages() final;
+    HRESULT SendMessage(const char *data, DWORD size) final;
     HRESULT Flush();
     void SendGreetings(const std::string &name) final;
 
 private:
+    int BeHost(int res);
     int m_socket;
     std::string m_sharedBuffer;
     MessageParser m_readParser;
@@ -520,14 +504,13 @@ Client::~Client()
     ::close(m_socket);
 }
 
-HRESULT Client::Receive()
+HRESULT Client::ReceiveMessages()
 {
     while (true) {
         ssize_t size = ::read(m_socket, &m_sharedBuffer[0], m_sharedBuffer.size());
         if (size < 0) {
-            if (errno != EAGAIN) {
-                return DPERR_CONNECTIONLOST;
-            }
+            if (errno != EAGAIN)
+                return BeHost(DPERR_CONNECTIONLOST);
             return DP_OK;
         } else {
             if (size)
@@ -537,29 +520,15 @@ HRESULT Client::Receive()
     };
 }
 
-HRESULT Client::Send(const char *data, DWORD size)
+HRESULT Client::SendMessage(const char *data, DWORD size)
 {
-#ifdef DEBUG_BPS
-    static size_t sent = 0;
-    static auto start = std::chrono::system_clock::now();
-    const auto now = std::chrono::system_clock::now();
-    std::chrono::duration<double> diff = now - start;
-    if (diff.count() >= 1) {
-        start = now;
-        std::cout << "Sent " << sent << " bytes in " << diff.count()<<  " second " << std::endl;
-        sent = 0;
-    }
-#endif
     auto res = Flush();
     if (res != DP_OK)
         return res;
     m_writeBuffer.appendData(MessageType::Data, data, size);
     res = Flush();
     if (res == DPERR_CONNECTIONLOST)
-        return DPERR_CONNECTIONLOST;
-#ifdef DEBUG_BPS
-    sent += size;
-#endif
+        return BeHost(DPERR_CONNECTIONLOST);
     return DP_OK;
 }
 
@@ -569,7 +538,7 @@ HRESULT Client::Flush()
         ssize_t written = ::write(m_socket, m_writeBuffer.data(), m_writeBuffer.size());
         if (written < 0) {
             if (errno != EAGAIN)
-                return DPERR_CONNECTIONLOST;
+                return BeHost(DPERR_CONNECTIONLOST);
             return DP_OK;
         } else {
             if (!written)
@@ -588,6 +557,44 @@ void Client::SendGreetings(const std::string &name)
     Flush();
 }
 
+int Client::BeHost(int res)
+{
+    if (AvP.Network != I_Peer)
+        return res;
+
+    for (const auto &player : netGameData.playerData) {
+        if (player.playerId && player.playerId != AVPDPNetID)
+            RemovePlayerFromGame(player.playerId);
+    }
+
+    /* Aha... the host has died, then. This is a terminal game state,
+    as the host was managing the game. Thefore, temporarily adopt host
+    duties for the purpose of ending the game...
+    This is most important during the playing state, but also happens in
+    startup. In startup, peers keep a host timeout which should fire before
+    this message arrives anyway. */
+    if((netGameData.myGameState==NGS_StartUp)||(netGameData.myGameState==NGS_Playing)||(netGameData.myGameState==NGS_Joining)||(netGameData.myGameState==NGS_EndGameScreen))
+    {
+        AvP.Network=I_Host;
+        /* Eek, I guess the old AIs bite the dust? */
+        //but the new host can create some more
+        AvP.NetworkAIServer = (netGameData.gameType==NGT_Coop);
+        Inform_NewHost();
+//        TransmitEndOfGameNetMsg();
+//        netGameData.myGameState = NGS_EndGame;
+//        AvP.MainLoopRunning = 0;
+
+        if(LobbiedGame)
+        {
+            //no longer a lowly client
+            LobbiedGame=LobbiedGame_Server;
+        }
+    }
+    LogNetInfo("system message:  DPSYS_HOST \n");
+    glpDP = 0; // don't recv/send messages anymore
+    return res;
+}
+
 static std::unique_ptr<Connection> connection;
 
 #ifdef __cplusplus
@@ -596,6 +603,8 @@ extern "C" {
 
 void InitializeNetwork()
 {
+    // Ignore sigpipe
+    signal(SIGPIPE, SIG_IGN);
 }
 
 void ShutdownNetwork()
@@ -619,24 +628,24 @@ void NetSessionUnInit()
     glpDP = 0;
 }
 
-HRESULT SessionReceiveMessages()
+HRESULT NetSessionReceiveMessages()
 {
     if (connection)
-        return connection->Receive();
+        return connection->ReceiveMessages();
     return DPERR_CONNECTIONLOST;
 }
 
-HRESULT SessionSendMessage(const char *lpData, DWORD dwDataSize)
+HRESULT NetSessionSendMessage(const char *lpData, DWORD dwDataSize)
 {
     if (connection)
-        return connection->Send(lpData, dwDataSize);
+        return connection->SendMessage(lpData, dwDataSize);
     return DPERR_CONNECTIONLOST;
 }
 
 /* directplay.c */
-int DirectPlay_ConnectingToLobbiedGame(char* playerName)
+int NetConnectingToLobbiedGame(char* playerName)
 {
-    fprintf(stderr, "DirectPlay_ConnectingToLobbiedGame(%s)\n", playerName);
+    fprintf(stderr, "NetConnectingToLobbiedGame(%s)\n", playerName);
 
     return 0;
 }
@@ -647,16 +656,16 @@ int NetConnectToSession(int sessionNumber, char *playerName)
         return 0;
     glpDP = 1;
     connection->SendGreetings(playerName);
-    fprintf(stderr, "DirectPlay_ConnectToSession(%d, %s)\n", sessionNumber, playerName);
+    fprintf(stderr, "NetConnectToSession(%d, %s)\n", sessionNumber, playerName);
     InitAVPNetGameForJoin();
     netGameData.levelNumber = SessionData[sessionNumber].levelIndex;
     netGameData.joiningGameStatus = JOINNETGAME_WAITFORDESC;
     return 1;
 }
 
-int DirectPlay_ConnectingToSession()
+int NetConnectingToSession()
 {
-//    fprintf(stderr, "DirectPlay_ConnectingToSession()\n");
+//    fprintf(stderr, "NetConnectingToSession()\n");
     MinimalNetCollectMessages();
     if(!netGameData.needGameDescription)
     {
@@ -666,11 +675,11 @@ int DirectPlay_ConnectingToSession()
     return 1;
 }
 
-BOOL DirectPlay_UpdateSessionList(int */*SelectedItem*/)
+BOOL NetUpdateSessionList(int */*SelectedItem*/)
 {
     if (connection && !NumberOfSessionsFound)
-        connection->Receive();
-//    fprintf(stderr, "DirectPlay_UpdateSessionList(%p)\n", SelectedItem);
+        connection->ReceiveMessages();
+//    fprintf(stderr, "NetUpdateSessionList(%p)\n", SelectedItem);
     return NumberOfSessionsFound;
 }
 
@@ -680,13 +689,13 @@ int NetJoinGame()
     try {
         connection = std::make_unique<Client>(IPAddressString);
     } catch(...) {}
-    fprintf(stderr, "DirectPlay_JoinGame(%s)\n", IPAddressString);
+    fprintf(stderr, "NetJoinGame(%s)\n", IPAddressString);
     return NumberOfSessionsFound = 0;
 }
 
-void DirectPlay_EnumConnections()
+void NetEnumConnections()
 {
-    fprintf(stderr, "DirectPlay_EnumConnections()\n");
+    fprintf(stderr, "NetEnumConnections()\n");
 
     netGameData.tcpip_available = 1;
     netGameData.ipx_available = 0;
@@ -694,7 +703,7 @@ void DirectPlay_EnumConnections()
     netGameData.serial_available = 0;
 }
 
-int DirectPlay_HostGame(char *playerName, char *sessionName,int species,int gamestyle,int level)
+int NetHostGame(char *playerName, char *sessionName,int species,int gamestyle,int level)
 {
     try {
         connection = std::make_unique<Server>(sessionName);
@@ -703,19 +712,11 @@ int DirectPlay_HostGame(char *playerName, char *sessionName,int species,int game
         AVPDPNetID = 0;
         return 0;
     } catch (...) { return 0; }
-    extern int DetermineAvailableCharacterTypes(int);
-    int maxPlayers=DetermineAvailableCharacterTypes(FALSE);
-    if(maxPlayers<1) maxPlayers=1;
-    if(maxPlayers>8) maxPlayers=8;
 
-    strcpy(AVPDPplayerName, playerName);
+    strncpy(AVPDPplayerName, playerName, NET_PLAYERNAMELENGTH + 2);
 
     if(!netGameData.skirmishMode) {
-        fprintf(stderr, "DirectPlay_HostGame(%s, %s, %d, %d, %d)\n", playerName, sessionName, species, gamestyle, level);
-
-        //fake multiplayer
-        //need to set the id to an non zero value
-
+        fprintf(stderr, "NetHostGame(%s, %s, %d, %d, %d)\n", playerName, sessionName, species, gamestyle, level);
         glpDP = 1;
     }
 
@@ -727,8 +728,7 @@ int NetDisconnectSession()
 {
     connection.reset();
     glpDP = 0;
-    fprintf(stderr, "DirectPlay_Disconnect()\n");
-
+    fprintf(stderr, "NetDisconnect()\n");
     return 1;
 }
 
@@ -748,9 +748,6 @@ HRESULT NetGetPlayerName(int glpDP, DPID id, char *data, DWORD *size)
     fprintf(stderr, "IDirectPlayX_GetPlayerName(%d, %d, %p, %p)\n", glpDP, id, data, size);
     return DPERR_INVALIDPLAYER;
 }
-
 #ifdef __cplusplus
 };
 #endif
-/* End of Linux-related junk */
-

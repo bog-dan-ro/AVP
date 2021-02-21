@@ -7,16 +7,16 @@ extern "C" {
 void InitializeNetwork();
 void ShutdownNetwork();
 
-HRESULT SessionReceiveMessages();
-HRESULT SessionSendMessage(const char *lpData, DWORD dwDataSize);
+HRESULT NetSessionReceiveMessages();
+HRESULT NetSessionSendMessage(const char *lpData, DWORD dwDataSize);
 BOOL NetSessionInit(DWORD cGrntdBufs, DWORD cBytesPerBuf, BOOL bErrChcks);
 void NetSessionUnInit();
 int NetDisconnectSession();
 HRESULT NetGetPlayerName(int glpDP, DPID id, char *data, DWORD *size);
 int NetConnectToSession(int sessionNumber, char *playerName);
-int DirectPlay_ConnectingToSession();
-int DirectPlay_ConnectingToLobbiedGame(char* playerName);
-void DirectPlay_EnumConnections();
+int NetConnectingToSession();
+int NetConnectingToLobbiedGame(char* playerName);
+void NetEnumConnections();
 
 #ifdef __cplusplus
 };

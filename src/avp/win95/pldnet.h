@@ -1026,7 +1026,7 @@ extern void RecordFinalNetGameScores(void);
 extern void DoNetScoresForHostDeath(NETGAME_CHARACTERTYPE myType,NETGAME_CHARACTERTYPE killerType);
 extern void AddPlayerToGame(DPID id, const char *name);
 extern void ProcessGameMessage(DPID senderId, const char *msgP, unsigned int msgSize);
-
+extern void Inform_NewHost(void);
 extern void RemovePlayerFromGame(DPID id);
 extern int EmptySlotInPlayerList(void);
 extern void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame);
@@ -1096,7 +1096,7 @@ extern void RestartNetworkGame(int seed);
 extern void DeallocatePlayersMirrorImage();
 
 void InitNetLog(void);
-void LogNetInfo(char *msg);
+void LogNetInfo(const char *msg);
 
 extern BOOL AreThereAnyLivesLeft();
 
