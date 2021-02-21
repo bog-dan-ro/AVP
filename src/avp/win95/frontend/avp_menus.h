@@ -312,10 +312,7 @@ Defines for numbers of levels transferred to AvP_EnvInfo.h
 typedef struct
 {
     char Name[40];
-    char levelIndex;//local level index
-//	GUID Guid;
-    int Guid;
-
+    int levelIndex;
     BOOL AllowedToJoin;
 } SESSION_DESC;
 #define MAX_NO_OF_SESSIONS 10

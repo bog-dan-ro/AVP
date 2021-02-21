@@ -6,6 +6,7 @@
 #include <vector>
 #include <thread>
 
+#include <assert.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -33,6 +34,17 @@ using time_point = std::chrono::time_point<system_clock>;
 
 static const uint16_t DEFAULT_PORT = 50706;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DPID AVPDPNetID;
+int QuickStartMultiplayer=1;
+char AVPDPplayerName[NET_PLAYERNAMELENGTH + 3] = "";
+int glpDP; /* directplay object */
+#ifdef __cplusplus
+}
+#endif
+
 class Connection {
 public:
     Connection(std::chrono::milliseconds timeout = std::chrono::milliseconds{5000})
@@ -41,69 +53,206 @@ public:
     virtual ~Connection(){}
     virtual HRESULT Receive() = 0;
     virtual HRESULT Send(const char *data, DWORD dataSize) = 0;
-    virtual HRESULT GetPlayerName(int id, char *data, DWORD *size) = 0;
-    virtual bool Established() const = 0;
-    virtual void SendGreetings(std::string name) = 0;
+    virtual void SendGreetings(const std::string &/*name*/){};
 
 protected:
     std::chrono::milliseconds m_timeout;
 };
 
-class Greetings {
+class MessageData {
 public:
-    std::string name;
-    std::function<void(const std::string &)> completedCallback;
-    bool completed = false;
-    size_t Parse(const char * data, size_t size)
-    {
-        if (completed || !size)
-            return 0;
-        u_int8_t res = 0;
-        if (!m_parsing) {
-            m_parsing = true;
-            m_remainingBytes = *data++;
-            --size;
-            ++res;
-        }
-        res = std::min<size_t>(m_remainingBytes, size);
-        name.append(data, res);
-        m_remainingBytes -= res;
-        if (!m_remainingBytes) {
-            completed = true;
-            if (completedCallback)
-                completedCallback(name);
-        }
-        return res;
+    constexpr MessageData(const char *data, size_t size)
+        : m_data(data)
+        , m_size(size)
+    {}
+    constexpr inline const char *data() const { return m_data; }
+    constexpr inline size_t size() const { return m_size;}
+
+    inline MessageData& operator >>(std::string &val) {
+        const uint16_t *len = reinterpret_cast<const uint16_t*>(m_data);
+        assert(*len <= m_size);
+        val.append(m_data + 2 , *len);
+        m_data += 2 + *len;
+        m_size -= 2 + *len;
+        return *this;
+    };
+
+    template<typename T>
+    inline MessageData& operator >> (T &val) {
+        val = *reinterpret_cast<const T*>(m_data);
+        m_data += sizeof (T);
+        m_size -= sizeof (T);
+        return *this;
     }
 private:
-    uint8_t m_remainingBytes;
-    bool m_parsing = false;
+    const char *m_data;
+    size_t m_size;
+};
+
+enum class MessageType : uint8_t {
+    Data,
+    SessionInfo,
+    AddPlayer,
+    RemovePlayer
+};
+
+class MessageParser
+{
+    using MessageHandler = std::function <void(MessageType type, MessageData data)>;
+public:
+    MessageParser()
+    {}
+
+    void setMessageHandler(const MessageHandler &handler)
+    {
+        m_messageHandler = handler;
+    }
+
+    void parse(const char *data, uint32_t size)
+    {
+        if (m_parsed < sizeof (uint32_t) && size) {
+            uint32_t diff = sizeof (uint32_t) - m_parsed;
+            diff = min(diff, size);
+            memcpy(&m_header, data, diff);
+            size -= diff;
+            m_parsed += diff;
+            data += diff;
+        }
+        if (!size)
+            return;
+        uint32_t messageLength = m_header & 0x00ffffff;
+        const auto bufferedSize = m_data.size();
+        const auto remainingSize = messageLength - bufferedSize;
+        if (size >= remainingSize) {
+            m_parsed = 0;
+            assert(m_messageHandler);
+            if (bufferedSize) {
+                m_data.append(data, remainingSize);
+                m_messageHandler(MessageType(m_header>>24), {m_data.data(), messageLength});
+                m_data.clear();
+            } else {
+                m_messageHandler(MessageType(m_header>>24), {data, messageLength});
+            }
+            return parse(data + remainingSize, size - remainingSize);
+        } else {
+            m_data.append(data, size);
+        }
+    }
+
+private:
+    uint32_t m_header;
+    uint32_t m_parsed = 0;
+    std::string m_data;
+    MessageHandler m_messageHandler;
+};
+
+class MessageWriter : public std::string
+{
+public:
+    MessageWriter() = default;
+
+    inline MessageWriter &begin()
+    {
+        uint32_t len = 0;
+        m_pos = size();
+        append(reinterpret_cast<const char*>(&len), 4);
+        return *this;
+    }
+
+    inline MessageWriter &operator <<(const std::string &string)
+    {
+        uint16_t len = string.size();
+        append(reinterpret_cast<const char *>(&len), sizeof(len));
+        append(string);
+        return *this;
+    }
+
+    template<typename T>
+    inline MessageWriter &operator <<(T val)
+    {
+        append(reinterpret_cast<const char *>(&val), sizeof (val));
+        return *this;
+    }
+
+    inline MessageWriter &end(MessageType type)
+    {
+        assert(size() < 0x00ffffff);
+        uint32_t header = (uint32_t(type) << 24) | size() - m_pos - sizeof (uint32_t);
+        memcpy(const_cast<char*>(data() + m_pos), &header, sizeof(header));
+        return *this;
+    }
+
+    inline MessageWriter &appendData(MessageType type, const char *data, size_t size)
+    {
+        uint32_t header = (uint32_t(type) << 24) | size;
+        operator << (header);
+        append(data, size);
+        return *this;
+    }
+
+    inline MessageWriter &consume(size_t sz) {
+        assert(sz <= size());
+        erase(0, sz);
+        m_pos = size();
+        return *this;
+    }
+
+private:
+    uint32_t m_pos;
 };
 
 class Server : public Connection
 {
 public:
-    Server(const std::string &name, uint16_t port = DEFAULT_PORT, size_t maxConnections = NET_MAXPLAYERS);
+    Server(const std::string &sessionName, uint16_t port = DEFAULT_PORT, size_t maxConnections = NET_MAXPLAYERS);
     ~Server();
     // IOChannel interface
     HRESULT Receive() final;
     HRESULT Send(const char *data, DWORD dataSize) final;
-    HRESULT GetPlayerName(int id, char *data, DWORD *size) final;
-    bool Established() const final { return true; }
-    void SendGreetings(std::string /*name*/) final {}
+
 private:
     struct Socket {
-        Socket(int sock, const std::string &grStr, std::string &readBuffer)
+        Socket(int sock, const std::string &sessionName, std::string &sharedBuffer)
             : socket(sock)
-            , readBuffer(readBuffer)
+            , sharedBuffer(sharedBuffer)
         {
+            readParser.setMessageHandler([this](MessageType type, MessageData data){
+                switch (type) {
+                case MessageType::Data:
+                    ProcessGameMessage(socket, data.data(), data.size());
+                    break;
+                case MessageType::AddPlayer: {
+                    int id;
+                    data >> id;
+                    std::string name;
+                    data >> name;
+                    assert(!data.size());
+                    assert(socket == id);
+                    AddPlayerToGame(id, name.c_str());
+                    // send back all players info
+                    for (const auto &player : netGameData.playerData) {
+                        if (!player.playerId)
+                            continue;
+                        writeBuffer.begin();
+                        writeBuffer << player.playerId << std::string(player.name);
+                        writeBuffer.end(MessageType::AddPlayer);
+                    }
+                    Flush();
+                }
+                    break;
+                default:
+                    assert(false);
+                    break;
+                }
+            });
             int opt = 1;
             setsockopt(socket, SOL_TCP, TCP_NODELAY, &opt, sizeof(int));
-            greetings.completedCallback = [this] (const std::string &name) {
-                std::cout << __PRETTY_FUNCTION__ << " " << socket << " " << name << std::endl;
-                AddPlayerToGame(socket, name.c_str());
-            };
-            Send(grStr.data(), grStr.size());
+            writeBuffer.begin();
+            writeBuffer << sessionName;
+            writeBuffer << socket;
+            writeBuffer << netGameData.levelNumber;
+            writeBuffer.end(MessageType::SessionInfo);
+            Flush();
         }
         ~Socket() {
             std::cout << __PRETTY_FUNCTION__ << " " << socket << " " << std::endl;
@@ -111,64 +260,67 @@ private:
             ::shutdown(socket, SHUT_RDWR);
             ::close(socket);
         }
+
         HRESULT Recive()
         {
-            ssize_t size = ::read(socket, &readBuffer[0], readBuffer.size());
-            if (size < 0) {
-                if (errno != EAGAIN) {
-                    return DPERR_CONNECTIONLOST;
+            while (true) {
+                ssize_t size = ::read(socket, &sharedBuffer[0], sharedBuffer.size());
+                if (size < 0) {
+                    if (errno != EAGAIN) {
+                        return DPERR_CONNECTIONLOST;
+                    }
+                    return DP_OK;
+                } else {
+                    if (size)
+                        readParser.parse(sharedBuffer.data(), size);
+                    return DP_OK;
                 }
-            } else {
-                if (size) {
-                    size_t pos = !greetings.completed ? greetings.Parse(readBuffer.data(), size) : 0;
-                    ProcessGameMessage(socket, readBuffer.data() + pos, size - pos);
-                }
-            }
-            return DP_OK;
-        }
-        HRESULT Send(const char *data, size_t size)
-        {
-            ssize_t written = ::write(socket, data, size);
-            if (written < 0) {
-                if (errno != EAGAIN) {
-                    return DPERR_CONNECTIONLOST;
-                }
-                bytesToWrite = size;
-            } else {
-                bytesToWrite = size - written;
-            }
-            return bytesToWrite ? DPERR_BUSY : DP_OK;
+            };
         }
 
-        HRESULT SendRemainingBytes()
+        HRESULT Send(const std::vector<int> &lostConnections, const char *data, size_t size)
         {
-            if (!bytesToWrite)
-                return DP_OK;
-            auto res = Send(buffer->data() + buffer->length() - bytesToWrite, bytesToWrite);
-            if (res == DP_OK) {
-                buffer.reset();
+            writeBuffer.appendData(MessageType::Data, data, size);
+            for (int id : lostConnections) {
+                writeBuffer.begin();
+                writeBuffer << id;
+                writeBuffer.end(MessageType::RemovePlayer);
             }
-            return res;
+            return Flush();
+        }
+
+        HRESULT Flush() {
+            while (!writeBuffer.empty()) {
+                ssize_t written = ::write(socket, writeBuffer.data(), writeBuffer.size());
+                if (written < 0) {
+                    if (errno != EAGAIN)
+                        return DPERR_CONNECTIONLOST;
+                    return DP_OK;
+                } else {
+                    if (!written)
+                        return DP_OK;
+                    writeBuffer.erase(0, written);
+                }
+            }
+            return writeBuffer.empty() ? DP_OK : DPERR_BUSY;
         }
         int socket;
-        time_point timeout = system_clock::now();
-        Greetings greetings;
-        int bytesToWrite = 0;
-        std::shared_ptr<std::string> buffer;
-        std::string &readBuffer;
+        std::string &sharedBuffer;
+        MessageParser readParser;
+        MessageWriter writeBuffer;
     };
+    std::string m_sharedBuffer;
     std::vector<std::unique_ptr<Socket>> m_connections;
-    std::string m_readBuffer;
+    std::vector<int> m_lostConnections;
     int m_acceptSocket;
     size_t m_maxConnections;
-    std::string m_greetings;
+    std::string m_sesionName;
 };
 
-Server::Server(const std::string &name, uint16_t port, size_t maxConnections)
+Server::Server(const std::string &sessionName, uint16_t port, size_t maxConnections)
     : m_maxConnections(maxConnections)
-    , m_greetings(name)
+    , m_sesionName(sessionName)
 {
-    m_greetings.insert(0, 1, m_greetings.size());
     if ((m_acceptSocket = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)) < 0)
         throw std::runtime_error{"Can't create the socket"};
     std::cout << "Listen socker " << m_acceptSocket << std::endl;
@@ -189,7 +341,8 @@ Server::Server(const std::string &name, uint16_t port, size_t maxConnections)
     unsigned int m = sizeof(n);
     if (getsockopt(m_acceptSocket, SOL_SOCKET, SO_RCVBUF,(void *)&n, &m) != 0 || n < 4096)
         n = 4 * 1024 * 1024;
-    m_readBuffer.resize(n);
+    m_sharedBuffer.resize(n);
+    AVPDPNetID = m_acceptSocket;
 }
 
 Server::~Server()
@@ -205,13 +358,18 @@ HRESULT Server::Receive()
         int sock = ::accept4(m_acceptSocket, (struct sockaddr *)&in_addr, &in_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
         if (-1 == sock)
             break;
-        m_connections.push_back(std::make_unique<Socket>(sock, m_greetings, m_readBuffer));
+        try {
+            m_connections.push_back(std::make_unique<Socket>(sock, m_sesionName, m_sharedBuffer));
+        } catch (...) {
+            ::close(sock);
+        }
     }
 
     for (auto it = m_connections.begin(); it != m_connections.end();) {
         auto res = (*it)->Recive();
         switch (res) {
         case DPERR_CONNECTIONLOST:
+            m_lostConnections.push_back((*it)->socket);
             it = m_connections.erase(it);
             break;
         default:
@@ -225,55 +383,36 @@ HRESULT Server::Send(const char *data, DWORD dataSize)
 {
     bool busy = false;
     for (auto it = m_connections.begin(); it != m_connections.end();) {
-        auto res = (*it)->SendRemainingBytes();
+        auto res =(*it)->Flush();
         switch (res) {
         case DPERR_CONNECTIONLOST:
+            m_lostConnections.push_back((*it)->socket);
             it = m_connections.erase(it);
             break;
         case DPERR_BUSY:
             busy = true;
-        default: // fallthrough
+//            [[fallthrough]]
+        default:
             ++it;
         }
     }
     if (busy)
         return DPERR_BUSY;
 
-    std::shared_ptr<std::string> sharedBuffer;
+    auto lostConnections = std::move(m_lostConnections);
+    m_lostConnections.clear();
     for (auto it = m_connections.begin(); it != m_connections.end();) {
-        auto res = (*it)->Send(data, dataSize);
+        auto res = (*it)->Send(lostConnections, data, dataSize);
         switch (res) {
         case DPERR_CONNECTIONLOST:
+            m_lostConnections.push_back((*it)->socket);
             it = m_connections.erase(it);
             break;
-        case DPERR_BUSY:
-            if (!sharedBuffer)
-                sharedBuffer = std::make_shared<std::string>(data, dataSize);
-            (*it)->buffer = sharedBuffer;
-        default: // fallthrough
+        default:
             ++it;
         }
     }
     return DP_OK;
-}
-
-HRESULT Server::GetPlayerName(int id, char *data, DWORD *size)
-{
-    for (const auto &con : m_connections) {
-        if (con->socket == id) {
-            const auto &name = con->greetings.name;
-            if (!data) {
-                *size = name.size() + 1;
-            } else if (*size <= name.size()) {
-                *size = name.size() + 1;
-                return DPERR_BUFFERTOOSMALL;
-            } else {
-                strncpy(data, name.c_str(), *size);
-            }
-            return DP_OK;
-        }
-    }
-    return DPERR_INVALIDPLAYER;
 }
 
 class Client: public Connection
@@ -281,28 +420,19 @@ class Client: public Connection
 public:
     Client(const char * ipAddress, uint16_t port= DEFAULT_PORT);
     ~Client();
+
     // IOChannel interface
     HRESULT Receive() final;
-    HRESULT Send(const char *data, DWORD dataSize) final;
-    bool Established() const final { return m_greetings.completed; }
-    void SendGreetings(std::string name) final;
+    HRESULT Send(const char *data, DWORD size) final;
+    HRESULT Flush();
+    void SendGreetings(const std::string &name) final;
 
 private:
     int m_socket;
-    std::string m_readBuffer;
-    std::string m_writeBuffer;
-    Greetings m_greetings;
-
-    // Connection interface
-public:
-    HRESULT GetPlayerName(int id, char *data, DWORD *size) override;
+    std::string m_sharedBuffer;
+    MessageParser m_readParser;
+    MessageWriter m_writeBuffer;
 };
-
-HRESULT Client::GetPlayerName(int id, char *data, DWORD *size)
-{
-
-    return DP_OK;
-}
 
 Client::Client(const char *ipAddress, uint16_t port)
 {
@@ -332,71 +462,116 @@ Client::Client(const char *ipAddress, uint16_t port)
         ::close(m_socket);
         throw std::runtime_error{"Can't set flags"};
     }
-    int n;
+    int n = 4096;
     unsigned int m = sizeof(n);
     if (getsockopt(m_socket, SOL_SOCKET, SO_RCVBUF,(void *)&n, &m) != 0 || n < 4096)
         n = 4 * 1024 * 1024;
-    m_readBuffer.resize(n);
+    m_sharedBuffer.resize(n);
     int opt = 1;
     setsockopt(m_socket, SOL_TCP, TCP_NODELAY, &opt, sizeof(int));
-    m_greetings.completedCallback = [this] (const std::string &name) {
-        SessionData[0].AllowedToJoin = true;
-        SessionData[0].Guid = m_socket;
-        strncpy(&SessionData[0].Name[0], name.c_str(), 40);
-        std::cout << "Found server " << name << std::endl;
-        NumberOfSessionsFound = 1;
-    };
+    AVPDPNetID = 0;
+    m_readParser.setMessageHandler([this](MessageType type, MessageData data){
+        switch (type) {
+        case MessageType::Data:
+            ProcessGameMessage(m_socket, data.data(), data.size());
+            break;
+        case MessageType::SessionInfo: {
+            std::string name;
+            data >> name >> AVPDPNetID >> SessionData[0].levelIndex;
+            assert(!data.size());
+            std::cout << "Found server " << name
+                      << " client id " << AVPDPNetID
+                      << " level index" << SessionData[0].levelIndex
+                      << std::endl;
+            SessionData[0].AllowedToJoin = true;
+            strncpy(&SessionData[0].Name[0], name.c_str(), 40);
+            NumberOfSessionsFound = 1;
+        }
+            break;
+        case MessageType::AddPlayer: {
+            DPID playerId;
+            std::string name;
+            data >> playerId >> name;
+            assert(!data.size());
+            std::cout << "AddPlayer " << playerId << " " << name << std::endl;
+            AddPlayerToGame(playerId, name.c_str());
+        }
+            break;
+        case MessageType::RemovePlayer: {
+            DPID playerId;
+            data >> playerId;
+            assert(!data.size());
+            std::cout << "RemovePlayer " << playerId << std::endl;
+            RemovePlayerFromGame(playerId);
+        }
+            break;
+        default:
+            assert(false);
+            break;
+        }
+    });
 }
 
 Client::~Client()
 {
     std::cout << __PRETTY_FUNCTION__ << " " << m_socket << " " << std::endl;
-    RemovePlayerFromGame(m_socket);
+    RemovePlayerFromGame(AVPDPNetID);
     ::shutdown(m_socket, SHUT_RDWR);
     ::close(m_socket);
 }
 
 HRESULT Client::Receive()
 {
-    ssize_t size = ::read(m_socket, &m_readBuffer[0], m_readBuffer.size());
-    if (size < 0) {
-        if (errno != EAGAIN)
-            return DPERR_CONNECTIONLOST;
-    } else {
-        if (size) {
-            size_t pos = !m_greetings.completed ? m_greetings.Parse(m_readBuffer.data(), size) : 0;
-            ProcessGameMessage(m_socket, m_readBuffer.data() + pos, size - pos);
+    while (true) {
+        ssize_t size = ::read(m_socket, &m_sharedBuffer[0], m_sharedBuffer.size());
+        if (size < 0) {
+            if (errno != EAGAIN) {
+                return DPERR_CONNECTIONLOST;
+            }
+            return DP_OK;
+        } else {
+            if (size)
+                m_readParser.parse(m_sharedBuffer.data(), size);
+            return DP_OK;
+        }
+    };
+}
+
+HRESULT Client::Send(const char *data, DWORD size)
+{
+    auto res = Flush();
+    if (res != DP_OK)
+        return res;
+    m_writeBuffer.appendData(MessageType::Data, data, size);
+    res = Flush();
+    if (res == DPERR_CONNECTIONLOST)
+        return DPERR_CONNECTIONLOST;
+    return DP_OK;
+}
+
+HRESULT Client::Flush()
+{
+    while (!m_writeBuffer.empty()) {
+        ssize_t written = ::write(m_socket, m_writeBuffer.data(), m_writeBuffer.size());
+        if (written < 0) {
+            if (errno != EAGAIN)
+                return DPERR_CONNECTIONLOST;
+            return DP_OK;
+        } else {
+            if (!written)
+                return DP_OK;
+            m_writeBuffer.erase(0, written);
         }
     }
-    return DP_OK;
+    return m_writeBuffer.empty() ? DP_OK : DPERR_BUSY;
 }
 
-HRESULT Client::Send(const char *data, DWORD dataSize)
+void Client::SendGreetings(const std::string &name)
 {
-    if (m_writeBuffer.size()) {
-        std::string tmp = std::move(m_writeBuffer);
-        m_writeBuffer.clear();
-        auto res = Send(tmp.data(), tmp.size());
-        if (res != DP_OK)
-            return res;
-        if (m_writeBuffer.size())
-            return DPERR_BUSY;
-    }
-    ssize_t written = ::write(m_socket, data, dataSize);
-    if (written < 0) {
-        if (errno != EAGAIN)
-            return DPERR_CONNECTIONLOST;
-        written = 0;
-    }
-    if (written != dataSize)
-        m_writeBuffer = std::string(data + written, dataSize - written);
-    return DP_OK;
-}
-
-void Client::SendGreetings(std::string name)
-{
-    name.insert(0, 1, name.size());
-    Send(name.data(), name.size());
+    m_writeBuffer.begin();
+    m_writeBuffer << AVPDPNetID << name;
+    m_writeBuffer.end(MessageType::AddPlayer);
+    Flush();
 }
 
 static std::unique_ptr<Connection> connection;
@@ -404,12 +579,7 @@ static std::unique_ptr<Connection> connection;
 #ifdef __cplusplus
 extern "C" {
 #endif
-DPID AVPDPNetID;
-int QuickStartMultiplayer=1;
-char AVPDPplayerName[NET_PLAYERNAMELENGTH + 3] = "";
-int glpDP; /* directplay object */
-//static int accept_sock = -1;
-//static bool server_mode = false;
+
 void InitializeNetwork()
 {
 }
@@ -459,9 +629,8 @@ int DirectPlay_ConnectingToLobbiedGame(char* playerName)
 
 int NetConnectToSession(int sessionNumber, char *playerName)
 {
-    if (!connection)
+    if (!connection || !AVPDPNetID)
         return 0;
-    AVPDPNetID = 1;
     glpDP = 1;
     connection->SendGreetings(playerName);
     fprintf(stderr, "DirectPlay_ConnectToSession(%d, %s)\n", sessionNumber, playerName);
@@ -473,7 +642,7 @@ int NetConnectToSession(int sessionNumber, char *playerName)
 
 int DirectPlay_ConnectingToSession()
 {
-    fprintf(stderr, "DirectPlay_ConnectingToSession()\n");
+//    fprintf(stderr, "DirectPlay_ConnectingToSession()\n");
     MinimalNetCollectMessages();
     if(!netGameData.needGameDescription)
     {
@@ -485,7 +654,7 @@ int DirectPlay_ConnectingToSession()
 
 BOOL DirectPlay_UpdateSessionList(int */*SelectedItem*/)
 {
-    if (connection && !connection->Established())
+    if (connection && !NumberOfSessionsFound)
         connection->Receive();
 //    fprintf(stderr, "DirectPlay_UpdateSessionList(%p)\n", SelectedItem);
     return NumberOfSessionsFound;
@@ -496,8 +665,7 @@ int NetJoinGame()
     extern const char IPAddressString[];
     try {
         connection = std::make_unique<Client>(IPAddressString);
-    } catch(...) {
-    }
+    } catch(...) {}
     fprintf(stderr, "DirectPlay_JoinGame(%s)\n", IPAddressString);
     return NumberOfSessionsFound = 0;
 }
@@ -516,13 +684,16 @@ int DirectPlay_HostGame(char *playerName, char *sessionName,int species,int game
 {
     try {
         connection = std::make_unique<Server>(sessionName);
-    }  catch (...) { return 0; }
+    } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        AVPDPNetID = 0;
+        return 0;
+    } catch (...) { return 0; }
     extern int DetermineAvailableCharacterTypes(int);
     int maxPlayers=DetermineAvailableCharacterTypes(FALSE);
     if(maxPlayers<1) maxPlayers=1;
     if(maxPlayers>8) maxPlayers=8;
 
-    AVPDPNetID = 1;
     strcpy(AVPDPplayerName, playerName);
 
     if(!netGameData.skirmishMode) {
@@ -549,10 +720,18 @@ int NetDisconnectSession()
 
 HRESULT NetGetPlayerName(int glpDP, DPID id, char *data, DWORD *size)
 {
-    if (connection)
-        return connection->GetPlayerName(id, data, size);
+    for (const auto &player : netGameData.playerData) {
+        if (player.playerId == id) {
+            if (data) {
+                if (*size <= strlen(player.name))
+                    return DPERR_BUFFERTOOSMALL;
+                strncpy(data, player.name, *size);
+            }
+            *size = strlen(player.name) + 1;
+            return DP_OK;
+        }
+    }
     fprintf(stderr, "IDirectPlayX_GetPlayerName(%d, %d, %p, %p)\n", glpDP, id, data, size);
-
     return DPERR_INVALIDPLAYER;
 }
 
