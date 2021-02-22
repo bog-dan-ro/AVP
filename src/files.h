@@ -23,13 +23,14 @@ extern "C" {
 
 typedef struct GameDirectoryFile
 {
-	char *filename;
-	int attr;
-	time_t timestamp;
+    char *filename;
+    int attr;
+    time_t timestamp;
 } GameDirectoryFile;
 
 int SetGameDirectories(const char *local, const char *global);
 FILE *OpenGameFile(const char *filename, int mode, int type);
+char *FixFilename(const char *filename, const char *prefix, int force);
 int CloseGameFile(FILE *pfd);
 int GetGameFileAttributes(const char *filename, int type);
 int DeleteGameFile(const char *filename);

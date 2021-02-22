@@ -3,14 +3,15 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
-#include <assert.h>
+#include <cassert>
+#include <csignal>
+#include <cstring>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
-#include <string.h>
-#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -41,10 +42,10 @@ public:
     Connection(std::chrono::milliseconds timeout = std::chrono::milliseconds{5000})
         : m_timeout(timeout)
     {}
-    virtual ~Connection(){}
+    virtual ~Connection()= default;
     virtual HRESULT ReceiveMessages() = 0;
     virtual HRESULT SendMessage(const char *data, DWORD dataSize) = 0;
-    virtual void SendGreetings(const std::string &/*name*/){};
+    virtual void SendGreetings(const std::string &/*name*/){}
 
 protected:
     std::chrono::milliseconds m_timeout;
@@ -60,16 +61,17 @@ public:
     constexpr inline size_t size() const { return m_size;}
 
     inline MessageData& operator >>(std::string &val) {
-        const uint16_t *len = reinterpret_cast<const uint16_t*>(m_data);
+        const auto len = reinterpret_cast<const uint16_t*>(m_data);
         assert(*len <= m_size);
         val.append(m_data + 2 , *len);
         m_data += 2 + *len;
         m_size -= 2 + *len;
         return *this;
-    };
+    }
 
     template<typename T>
     inline MessageData& operator >> (T &val) {
+        static_assert(std::is_pod<T>(), "T must be POD");
         val = *reinterpret_cast<const T*>(m_data);
         m_data += sizeof (T);
         m_size -= sizeof (T);
@@ -91,8 +93,7 @@ class MessageParser
 {
     using MessageHandler = std::function <void(MessageType type, MessageData data)>;
 public:
-    MessageParser()
-    {}
+    MessageParser() = default;
 
     void setMessageHandler(const MessageHandler &handler)
     {
@@ -161,6 +162,7 @@ public:
     template<typename T>
     inline MessageWriter &operator <<(T val)
     {
+        static_assert(std::is_pod<T>(), "T must be POD");
         append(reinterpret_cast<const char *>(&val), sizeof (val));
         return *this;
     }
@@ -184,11 +186,11 @@ private:
     uint32_t m_pos;
 };
 
-class Server : public Connection
+class Server final : public Connection
 {
 public:
     Server(const std::string &sessionName, uint16_t port = DEFAULT_PORT, size_t maxConnections = NET_MAXPLAYERS);
-    ~Server();
+    ~Server() final;
 
     // IOChannel interface
     HRESULT ReceiveMessages() final;
@@ -212,6 +214,7 @@ private:
                     assert(!data.size());
                     assert(socket == id);
                     AddPlayerToGame(id, name.c_str());
+                    sendData = true;
                     // send back all players info
                     for (const auto &player : netGameData.playerData) {
                         if (!player.playerId)
@@ -258,11 +261,13 @@ private:
                         readParser.parse(sharedBuffer.data(), size);
                     return DP_OK;
                 }
-            };
+            }
         }
 
         HRESULT SendMessage(const std::vector<int> &lostConnections, const char *data, size_t size)
         {
+            if (!sendData)
+                return DP_OK;
             writeBuffer.appendData(MessageType::Data, data, size);
             for (int id : lostConnections) {
                 writeBuffer.begin();
@@ -291,6 +296,7 @@ private:
         std::string &sharedBuffer;
         MessageParser readParser;
         MessageWriter writeBuffer;
+        bool sendData = false;
     };
     std::string m_sharedBuffer;
     std::vector<std::unique_ptr<Socket>> m_connections;
@@ -316,7 +322,7 @@ Server::Server(const std::string &sessionName, uint16_t port, size_t maxConnecti
         ::close(m_acceptSocket);
         throw std::runtime_error{"Can't bind the socket"};
     }
-    if (::listen(m_acceptSocket, 8) < 0) {
+    if (::listen(m_acceptSocket, NET_MAXPLAYERS) < 0) {
         ::close(m_acceptSocket);
         throw std::runtime_error{"Can't listen"};
     }
@@ -398,11 +404,11 @@ HRESULT Server::SendMessage(const char *data, DWORD dataSize)
     return DP_OK;
 }
 
-class Client: public Connection
+class Client final: public Connection
 {
 public:
     Client(const char * ipAddress, uint16_t port= DEFAULT_PORT);
-    ~Client();
+    ~Client() final;
 
     // IOChannel interface
     HRESULT ReceiveMessages() final;
@@ -749,5 +755,5 @@ HRESULT NetGetPlayerName(int glpDP, DPID id, char *data, DWORD *size)
     return DPERR_INVALIDPLAYER;
 }
 #ifdef __cplusplus
-};
+}
 #endif

@@ -103,19 +103,19 @@ NETGAME_GAMEDATA netGameData=
     0,	//int sendTimer;
 
     //player type limits
-    8,	//unsigned int maxPredator;
-    8,	//unsigned int maxAlien;
-    8,	//unsigned int maxMarine;
+    NET_MAXPLAYERS,	//unsigned int maxPredator;
+    NET_MAXPLAYERS,	//unsigned int maxAlien;
+    NET_MAXPLAYERS,	//unsigned int maxMarine;
 
-    8,	//unsigned int maxMarineGeneral;
-    8,	//unsigned int maxMarinePulseRifle;
-    8,	//unsigned int maxMarineSmartgun;
-    8,	//unsigned int maxMarineFlamer;
-    8,	//unsigned int maxMarineSadar;
-    8,	//unsigned int maxMarineGrenade;
-    8,	//unsigned int maxMarineMinigun;
-    8,	//unsigned int maxMarineSmartDisc;
-    8,	//unsigned int maxMarinePistols;
+    NET_MAXPLAYERS,	//unsigned int maxMarineGeneral;
+    NET_MAXPLAYERS,	//unsigned int maxMarinePulseRifle;
+    NET_MAXPLAYERS,	//unsigned int maxMarineSmartgun;
+    NET_MAXPLAYERS,	//unsigned int maxMarineFlamer;
+    NET_MAXPLAYERS,	//unsigned int maxMarineSadar;
+    NET_MAXPLAYERS,	//unsigned int maxMarineGrenade;
+    NET_MAXPLAYERS,	//unsigned int maxMarineMinigun;
+    NET_MAXPLAYERS,	//unsigned int maxMarineSmartDisc;
+    NET_MAXPLAYERS,	//unsigned int maxMarinePistols;
 
     //weapons allowed
     TRUE,	//BOOL allowSmartgun;
@@ -182,18 +182,18 @@ void SetDefaultMultiplayerConfig()
     netGameData.aiKillValues[1]=100;
     netGameData.aiKillValues[2]=150;
 
-    netGameData.maxMarine=8;
-    netGameData.maxAlien=8;
-    netGameData.maxPredator=8;
-    netGameData.maxMarineGeneral=8;
-    netGameData.maxMarinePulseRifle=8;
-    netGameData.maxMarineSmartgun=8;
-    netGameData.maxMarineFlamer=8;
-    netGameData.maxMarineSadar=8;
-    netGameData.maxMarineGrenade=8;
-    netGameData.maxMarineMinigun=8;
-    netGameData.maxMarineSmartDisc=8;
-    netGameData.maxMarinePistols=8;
+    netGameData.maxMarine=NET_MAXPLAYERS;
+    netGameData.maxAlien=NET_MAXPLAYERS;
+    netGameData.maxPredator=NET_MAXPLAYERS;
+    netGameData.maxMarineGeneral=NET_MAXPLAYERS;
+    netGameData.maxMarinePulseRifle=NET_MAXPLAYERS;
+    netGameData.maxMarineSmartgun=NET_MAXPLAYERS;
+    netGameData.maxMarineFlamer=NET_MAXPLAYERS;
+    netGameData.maxMarineSadar=NET_MAXPLAYERS;
+    netGameData.maxMarineGrenade=NET_MAXPLAYERS;
+    netGameData.maxMarineMinigun=NET_MAXPLAYERS;
+    netGameData.maxMarineSmartDisc=NET_MAXPLAYERS;
+    netGameData.maxMarinePistols=NET_MAXPLAYERS;
 
     netGameData.allowSmartgun=1;
     netGameData.allowFlamer=1;
@@ -10262,18 +10262,18 @@ int DetermineAvailableCharacterTypes(BOOL ConsiderUsedCharacters)
     {
         //Skirmish mode - player can be anything except an alien
         netGameData.maxAlien = 0;
-        netGameData.maxPredator=8;
-        netGameData.maxMarine=8;
+        netGameData.maxPredator=NET_MAXPLAYERS;
+        netGameData.maxMarine=NET_MAXPLAYERS;
 
-        netGameData.maxMarineGeneral=8;
-        netGameData.maxMarinePulseRifle=8;
-        netGameData.maxMarineSmartgun=8;
-        netGameData.maxMarineFlamer=8;
-        netGameData.maxMarineSadar=8;
-        netGameData.maxMarineGrenade=8;
-        netGameData.maxMarineMinigun=8;
-        netGameData.maxMarineSmartDisc=8;
-        netGameData.maxMarinePistols=8;
+        netGameData.maxMarineGeneral=NET_MAXPLAYERS;
+        netGameData.maxMarinePulseRifle=NET_MAXPLAYERS;
+        netGameData.maxMarineSmartgun=NET_MAXPLAYERS;
+        netGameData.maxMarineFlamer=NET_MAXPLAYERS;
+        netGameData.maxMarineSadar=NET_MAXPLAYERS;
+        netGameData.maxMarineGrenade=NET_MAXPLAYERS;
+        netGameData.maxMarineMinigun=NET_MAXPLAYERS;
+        netGameData.maxMarineSmartDisc=NET_MAXPLAYERS;
+        netGameData.maxMarinePistols=NET_MAXPLAYERS;
     }
 
     CharacterTypesAvailable[NGCT_Marine]=netGameData.maxMarine;
