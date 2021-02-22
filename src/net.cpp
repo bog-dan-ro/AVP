@@ -53,7 +53,7 @@ protected:
 
 class MessageData {
 public:
-    constexpr MessageData(const char *data, size_t size)
+    constexpr MessageData(const char *data = nullptr, size_t size = 0)
         : m_data(data)
         , m_size(size)
     {}
@@ -64,6 +64,16 @@ public:
         const auto len = reinterpret_cast<const uint16_t*>(m_data);
         assert(*len <= m_size);
         val.append(m_data + 2 , *len);
+        m_data += 2 + *len;
+        m_size -= 2 + *len;
+        return *this;
+    }
+
+    inline MessageData& operator >>(MessageData &val) {
+        const auto len = reinterpret_cast<const uint16_t*>(m_data);
+        assert(*len <= m_size);
+        val.m_data = m_data + 2;
+        val.m_size = *len;
         m_data += 2 + *len;
         m_size -= 2 + *len;
         return *this;
@@ -84,6 +94,7 @@ private:
 
 enum class MessageType : uint8_t {
     Data,
+    DispatchedData,
     SessionInfo,
     AddPlayer,
     RemovePlayer
@@ -159,6 +170,15 @@ public:
         return *this;
     }
 
+    inline MessageWriter &operator <<(MessageData data)
+    {
+        uint16_t len = data.size();
+        append(reinterpret_cast<const char *>(&len), sizeof(len));
+        append(data.data(), data.size());
+        return *this;
+    }
+
+
     template<typename T>
     inline MessageWriter &operator <<(T val)
     {
@@ -195,16 +215,21 @@ public:
     // IOChannel interface
     HRESULT ReceiveMessages() final;
     HRESULT SendMessage(const char *data, DWORD dataSize) final;
+    void DispatchMessage(MessageData data, int playerId);
+    void Flush();
 
 private:
     struct Socket {
-        Socket(int sock, const std::string &sessionName, std::string &sharedBuffer)
+        Socket(int sock, Server *server)
             : socket(sock)
-            , sharedBuffer(sharedBuffer)
+            , server(server)
         {
             readParser.setMessageHandler([this](MessageType type, MessageData data){
                 switch (type) {
                 case MessageType::Data:
+                    this->server->DispatchMessage(data, socket);
+//                    [[fallthrough]]
+                case MessageType::DispatchedData:
                     ProcessGameMessage(socket, data.data(), data.size());
                     break;
                 case MessageType::AddPlayer: {
@@ -234,7 +259,7 @@ private:
             int opt = 1;
             setsockopt(socket, SOL_TCP, TCP_NODELAY, &opt, sizeof(int));
             writeBuffer.begin();
-            writeBuffer << sessionName;
+            writeBuffer << server->m_sesionName;
             writeBuffer << socket;
             writeBuffer << netGameData.levelNumber;
             writeBuffer.end(MessageType::SessionInfo);
@@ -250,7 +275,7 @@ private:
         HRESULT ReceiveMessages()
         {
             while (true) {
-                ssize_t size = ::read(socket, &sharedBuffer[0], sharedBuffer.size());
+                ssize_t size = ::read(socket, &server->m_sharedBuffer[0], server->m_sharedBuffer.size());
                 if (size < 0) {
                     if (errno != EAGAIN) {
                         return DPERR_CONNECTIONLOST;
@@ -258,7 +283,7 @@ private:
                     return DP_OK;
                 } else {
                     if (size)
-                        readParser.parse(sharedBuffer.data(), size);
+                        readParser.parse(server->m_sharedBuffer.data(), size);
                     return DP_OK;
                 }
             }
@@ -293,7 +318,7 @@ private:
             return writeBuffer.empty() ? DP_OK : DPERR_BUSY;
         }
         int socket;
-        std::string &sharedBuffer;
+        Server *server;
         MessageParser readParser;
         MessageWriter writeBuffer;
         bool sendData = false;
@@ -348,7 +373,7 @@ HRESULT Server::ReceiveMessages()
         if (-1 == sock)
             break;
         try {
-            m_connections.push_back(std::make_unique<Socket>(sock, m_sesionName, m_sharedBuffer));
+            m_connections.push_back(std::make_unique<Socket>(sock, this));
         } catch (...) {
             ::close(sock);
         }
@@ -402,6 +427,18 @@ HRESULT Server::SendMessage(const char *data, DWORD dataSize)
         }
     }
     return DP_OK;
+}
+
+void Server::DispatchMessage(MessageData data, int playerId)
+{
+    for (auto &con : m_connections) {
+        if (con->socket != playerId) {
+            con->writeBuffer.begin();
+            con->writeBuffer << playerId << data;
+            con->writeBuffer.end(MessageType::DispatchedData);
+            con->Flush();
+        }
+    }
 }
 
 class Client final: public Connection
@@ -462,6 +499,13 @@ Client::Client(const char *ipAddress, uint16_t port)
     AVPDPNetID = 0;
     m_readParser.setMessageHandler([this](MessageType type, MessageData data){
         switch (type) {
+        case MessageType::DispatchedData: {
+            int playerId;
+            MessageData playerData;
+            data >> playerId >> playerData;
+            ProcessGameMessage(playerId, playerData.data(), playerData.size());
+        }
+            break;
         case MessageType::Data:
             ProcessGameMessage(m_socket, data.data(), data.size());
             break;
