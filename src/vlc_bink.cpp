@@ -1,12 +1,61 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "fixer.h"
+#include <string>
 
 #include "bink.h"
 
+
 #include <AL/al.h>
 #include <AL/alc.h>
+
+# include <vlc/vlc.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL BinkSys_Init()
+{
+    return 1;
+}
+void BinkSys_Release()
+{
+}
+
+//--- intro/outro
+void PlayBinkedFMV(char *filenamePtr, int volume)
+{
+}
+
+//--- menu background
+void StartMenuBackgroundBink()
+{
+}
+int PlayMenuBackgroundBink()
+{
+    return 0;
+}
+void EndMenuBackgroundBink()
+{
+}
+
+//---- music
+int StartMusicBink(char* filenamePtr, BOOL looping)
+{
+    return 0;
+}
+int PlayMusicBink(int volume)
+{
+    return 0;
+}
+void EndMusicBink()
+{}
+
+#ifdef __cplusplus
+} // extern "C" {
+#endif
+
+#if 0
 
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -522,7 +571,7 @@ void StartMenuBackgroundBink()
     if(!binkInitialized)
         return;
 
-    BinkStartMovie(&menuBackgroundMovie, "FMVs/Menubackground.bik", TRUE, FALSE, FALSE);
+    BinkStartMovie(&menuBackgroundMovie, "FMVs/menubackground.bik", TRUE, FALSE, FALSE);
 }
 
 
@@ -598,64 +647,4 @@ void EndMusicBink()
     BinkReleaseMovie(&musicMovie);
 }
 
-
-//-----------------------------------------------------------------------------------------------
-
-
-FMVHandle CreateBinkFMV(char* filenamePtr)
-{
-    if(!binkInitialized)
-        return 0;
-
-    struct binkMovie* movie = malloc(sizeof(struct binkMovie));
-    BinkInitMovieStruct(movie);
-
-    if(!BinkStartMovie(movie, filenamePtr, FALSE, TRUE, FALSE))
-    {
-        free(movie);
-        return 0;
-    }
-    return (FMVHandle)movie;
-}
-
-
-int UpdateBinkFMV(FMVHandle aFmvHandle, int volume)
-{
-    if(!binkInitialized || aFmvHandle==0)
-        return 0;
-
-    struct binkMovie* movie = (struct binkMovie*)aFmvHandle;
-    alSourcef(movie->alSource, AL_GAIN, PlatVolumeToGain(volume));
-    BinkUpdateMovie(movie);
-    BinkUpdateMovie(movie);
-    BinkUpdateMovie(movie);
-    BinkUpdateMovie(movie);
-    return BinkUpdateMovie(movie);
-}
-
-
-void CloseBinkFMV(FMVHandle aFmvHandle)
-{
-    if(!binkInitialized || aFmvHandle==0)
-        return 0;
-
-    struct binkMovie* movie = (struct binkMovie*)aFmvHandle;
-    BinkReleaseMovie(movie);
-    free(movie);
-}
-
-
-char* GetBinkFMVImage(FMVHandle aFmvHandle)
-{
-    if(!binkInitialized || aFmvHandle==0)
-        return 0;
-
-    struct binkMovie* movie = (struct binkMovie*)aFmvHandle;
-
-    if(!movie->videoScaleContext)
-        return 0;
-
-    return movie->videoScalePicture.data[0];
-}
-
-
+#endif

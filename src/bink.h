@@ -1,6 +1,12 @@
 #ifndef _BINK_H_
 #define _BINK_H_
 
+#include "fixer.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern BOOL BinkSys_Init();
 extern void BinkSys_Release();
 
@@ -17,15 +23,8 @@ extern int StartMusicBink(char* filenamePtr, BOOL looping);
 extern int PlayMusicBink(int volume);
 extern void EndMusicBink();
 
-
-//---- ingame fmv
-typedef unsigned int 	FMVHandle;
-
-extern FMVHandle  	CreateBinkFMV(char* filenamePtr);
-extern int			UpdateBinkFMV(FMVHandle aFmvHandle, int volume);
-extern void 		CloseBinkFMV(FMVHandle aFmvHandle);
-extern char*		GetBinkFMVImage(FMVHandle aFmvHandle);
-
-
+#ifdef __cplusplus
+} // extern "C" {
+#endif
 
 #endif //_BINK_H_
