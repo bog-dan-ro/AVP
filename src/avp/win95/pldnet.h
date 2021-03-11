@@ -15,7 +15,7 @@ extern "C" {
 /* ---------------------------------------------------------------------
   Some defines for multiplayer games
   ----------------------------------------------------------------------*/
-#define NET_MAXPLAYERS				(8)
+#define NET_MAXPLAYERS				(23)
 #define NET_MAXPLAYEROBJECTS		(15)
 #define NET_MAXPLAYERSCORE			(500)
 #define NET_MAXGAMETIME				(255) /* minutes */
